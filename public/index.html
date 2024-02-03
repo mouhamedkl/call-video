@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Call Example</title>
+</head>
+<body>
+  <h1>Video Call Example</h1>
+  <video id="localVideo" autoplay playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+
+  <script src="https://cdn.socket.io/4.1.3/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = stream;
+
+        socket.emit('offer', stream);
+
+        socket.on('answer', (answer) => {
+          handleAnswer(answer);
+        });
+
+        socket.on('ice-candidate', (candidate) => {
+          handleIceCandidate(candidate);
+        });
+      })
+      .catch((error) => console.error(error));
+
+    socket.on('offer', (offer) => {
+      handleOffer(offer);
+    });
+
+    function handleOffer(offer) {
+      const remoteVideo = document.getElementById('remoteVideo');
+      const peerConnection = new RTCPeerConnection();
+
+      offer.forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      peerConnection.createAnswer()
+        .then((answer) => peerConnection.setLocalDescription(answer))
+        .then(() => {
+          socket.emit('answer', peerConnection.localDescription);
+        });
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice-candidate', event.candidate);
+        }
+      };
+
+      peerConnection.ontrack = (event) => {
+        remoteVideo.srcObject = new MediaStream([event.track]);
+      };
+    }
+
+    function handleAnswer(answer) {
+      const peerConnection = new RTCPeerConnection();
+      peerConnection.setRemoteDescription(answer);
+    }
+
+    function handleIceCandidate(candidate) {
+      const peerConnection = new RTCPeerConnection();
+      peerConnection.addIceCandidate(candidate);
+    }
+  </script>
+</body>
+</html>
